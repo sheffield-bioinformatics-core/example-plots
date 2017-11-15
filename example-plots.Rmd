@@ -1,0 +1,188 @@
+---
+title: "Example Plots"
+author: "Mark Dunning"
+date: "15 November 2017"
+output: html_document
+---
+
+
+## Gene Expression Data
+
+We are going to get some public data from the Bioconductor website which in included in the `breastCancerNKI` package. This code will download the package if it is not already installed.
+
+```{r eval=FALSE}
+
+source("http://www.bioconductor.org/biocLite.R")
+biocLite("breastCancerNKI")
+biocLite("genefilter")
+biocLite("pheatmap")  
+```
+
+The `exprs` function can be used to extract the expression values for all patients in the study and all genes. The `rowSds` function will calculate the standard deviation for each gene
+
+```{r}
+library(breastCancerNKI)
+library(Biobase)
+library(genefilter)
+library(pheatmap)
+library(RColorBrewer)
+
+data(nki)
+
+expression_matrix <- exprs(nki)
+features <- fData(nki)
+patient_data <- pData(nki)
+
+gene_var <- rowSds(expression_matrix)
+top50 <- order(gene_var,decreasing = TRUE)[1:50]
+
+Grade <- factor(patient_data$grade)
+levels(Grade) <- c("Low","Medium","High")
+
+sample_anno <- data.frame(ER = ifelse(patient_data$er==0,"Negative","Positive"),Grade)
+rownames(sample_anno) <- colnames(expression_matrix)
+
+ann_colors <- list(
+  ER = c(Negative = "#E41A1C", Positive = "#377EB8"),
+  Grade = c(Low = "#4DAF4A", Medium = "#984EA3",  High = "#FF7F00")
+)
+
+
+    
+
+pheatmap(expression_matrix[top50,],annotation_col = sample_anno,
+         annotation_colors = ann_colors,
+         labels_row = features$NCBI.gene.symbol[top50],
+         main = "Gene Expression of 50 most variable genes")
+```
+
+
+```{r}
+png("GeneExpressionHeatmap.png",width=800,height=800)
+par(mfrow=c(1,2))
+pheatmap(expression_matrix[top50,],annotation_col = sample_anno,
+         annotation_colors = ann_colors,
+         labels_row = features$NCBI.gene.symbol[top50],
+         main = "Gene Expression of 50 most variable genes")
+dev.off()
+```
+
+
+```{r}
+png("SurvivalCurves.png",width=400,height=400)
+library(survival)
+plot (survfit (Surv(pData(nki)$t.dmfs , pData(nki)$e.dmfs) ~
+  pData(nki)$er) , col = c("#E41A1C" , "#377EB8"),lwd=10,
+    xlab="Survival Time",
+    ylab="Proportion of Patients")
+dev.off()
+```
+
+## ggbio
+
+```{r}
+biocLite("ggbio",suppressUpdates=TRUE)
+biocLite("Homo.sapiens",suppressUpdates=TRUE)
+```
+
+
+```{r}
+library(ggbio)
+p.ideo <- Ideogram(genome = "hg19")
+p.ideo
+library(GenomicRanges)
+## special highlights instead of zoomin!
+p.ideo + xlim(GRanges("chr2", IRanges(1e8, 1e8+10000000)))
+```
+
+```{r}
+fl.bam <- system.file("extdata", "wg-brca1.sorted.bam", package = "biovizBase")
+library(Homo.sapiens)
+data(genesymbol, package = "biovizBase")
+wh <- genesymbol[c("BRCA1", "NBR1")]
+wh <- range(wh, ignore.strand = TRUE)
+wh <- keepSeqlevels(wh, "chr17")
+autoplot(fl.bam, which = wh)
+p.txdb <- autoplot(Homo.sapiens, which = wh)
+p.txdb
+autoplot(Homo.sapiens, which = wh, label.color = "black", color = "brown",
+fill = "brown")
+```
+
+```{r}
+snp <- read.table(system.file("extdata", "plink.assoc.sub.txt", package = "biovizBase"),
+header = TRUE)
+require(biovizBase)
+gr.snp <- transformDfToGr(snp, seqnames = "CHR", start = "BP", width = 1)
+head(gr.snp)
+## change the seqname order
+require(GenomicRanges)
+gr.snp <- keepSeqlevels(gr.snp, as.character(1:22))
+seqlengths(gr.snp)
+## need to assign seqlengths
+data(ideoCyto, package = "biovizBase")
+seqlengths(gr.snp) <- as.numeric(seqlengths(ideoCyto$hg18)[1:22])
+## remove missing
+gr.snp <- gr.snp[!is.na(gr.snp$P)]
+## transform pvalue
+values(gr.snp)$pvalue <- -log10(values(gr.snp)$P)
+head(gr.snp)
+
+plotGrandLinear(gr.snp, aes(y = pvalue), color = c("#7fc97f", "#fdc086"),
+cutoff = 3, cutoff.color = "blue", cutoff.size = 0.2)
+```
+
+
+```{r}
+data(darned_hg19_subset500, package = "biovizBase")
+dn <- darned_hg19_subset500
+library(GenomicRanges)
+seqlengths(dn)
+## add seqlengths
+## we have seqlegnths information in another data set
+seqlengths(dn) <- seqlengths(ideoCyto$hg19)[names(seqlengths(dn))]
+## then we change order
+dn <- keepSeqlevels(dn, paste0("chr", c(1:22, "X")))
+seqlengths(dn)
+autoplot(dn, layout = "karyogram")
+
+autoplot(dn, layout = "karyogram", aes(color = exReg, fill = exReg), alpha = 0.5) +
+scale_color_discrete(na.value = "brown")
+```
+
+```{r}
+data("CRC", package = "biovizBase")
+p <- ggbio(trackWidth = 10, buffer = 0, radius = 10) + circle(hg19sub, geom = "ideo", fill = "gray70") +
+circle(hg19sub, geom = "scale", size = 2) +
+circle(hg19sub, geom = "text", aes(label = seqnames), vjust = 0, size = 3)
+p
+
+
+grl <- split(crc.gr, values(crc.gr)$individual)
+## need "unit", load grid
+library(grid)
+crc.lst <- lapply(grl, function(gr.cur){
+print(unique(as.character(values(gr.cur)$individual)))
+cols <- RColorBrewer::brewer.pal(3, "Set2")[2:1]
+
+names(cols) <- c("interchromosomal", "intrachromosomal")
+p <- ggbio() + circle(gr.cur, geom = "link", linked.to = "to.gr",
+aes(color = rearrangements)) +
+circle(hg19sub, geom = "ideo",
+color = "gray70", fill = "gray70") +
+scale_color_manual(values = cols) +
+labs(title = (unique(values(gr.cur)$individual))) +
+theme(plot.margin = unit(rep(0, 4), "lines"))
+})
+
+arrangeGrobByParsingLegend(crc.lst, widths = c(4, 1), legend.idx = 1, ncol = 3)
+```
+
+
+
+## Oncoprint
+
+https://www.bioconductor.org/packages/devel/bioc/vignettes/ComplexHeatmap/inst/doc/s8.oncoprint.html#toc_2
+
+
+
