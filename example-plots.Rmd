@@ -28,6 +28,10 @@ library(pheatmap)
 library(RColorBrewer)
 
 data(nki)
+features <- fData(nki)
+##We want only genes that have a name annotated
+
+nki <- nki[-which(is.na(features$HUGO.gene.symbol)),]
 
 expression_matrix <- exprs(nki)
 features <- fData(nki)
@@ -52,12 +56,13 @@ ann_colors <- list(
 
 pheatmap(expression_matrix[top50,],annotation_col = sample_anno,
          annotation_colors = ann_colors,
-         labels_row = features$NCBI.gene.symbol[top50],
+         labels_row = features$HUGO.gene.symbol[top50],
          main = "Gene Expression of 50 most variable genes")
 ```
 
 
 ```{r}
+getwd()
 png("GeneExpressionHeatmap.png",width=800,height=800)
 par(mfrow=c(1,2))
 pheatmap(expression_matrix[top50,],annotation_col = sample_anno,
