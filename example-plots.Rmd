@@ -214,16 +214,18 @@ dev.off()
 ```{r eval=FALSE}
 
 source("http://www.bioconductor.org/biocLite.R")
-biocLite("pathview",suppressUpdates = FALSE)
+biocLite("pathview",suppressUpdates = TRUE)
 
 ```
 
 ```{r}
+library(org.Hs.eg.db)
+biocLite("org.Hs.eg.db")
 library(pathview)
 ```
 
 
-## t-SNE
+## t-SNE (Single-Cell)
 
 ```{r eval=FALSE}
 biocLite("SingleCellExperiment",suppressUpdates = TRUE)
@@ -238,54 +240,32 @@ download.file("https://raw.githubusercontent.com/hemberg-lab/scRNA.seq.course/ma
 ```
 
 ```{r}
-
+molecules <- read.table("molecules.txt", sep = "\t")
+anno <- read.table("annotation.txt", sep = "\t", header = TRUE)
 ```
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
-download.file("https://github.com/hemberg-lab/scRNA.seq.course/raw/master/tung/reads.txt",destfile = "reads.txt")
-
 library(SingleCellExperiment)
 library(scater)
-
-reads <- read.table("reads.txt", sep = "\t")
-anno <- read.table("annotation.txt", sep = "\t", header = TRUE)
-
-reads <- SingleCellExperiment(
-    assays = list(counts = as.matrix(reads)), 
+umi <- SingleCellExperiment(
+    assays = list(counts = as.matrix(molecules)), 
     colData = anno
 )
-
 ```
 
-```{r}
-keep_feature <- rowSums(counts(reads) > 0) > 0
-reads <- reads[keep_feature, ]
-```
+
 
 ```{r}
-isSpike(reads, "ERCC") <- grepl("^ERCC-", rownames(reads))
-isSpike(reads, "MT") <- rownames(reads) %in% 
+keep_feature <- rowSums(counts(umi) > 0) > 0
+umi <- umi[keep_feature, ]
+```
+
+
+```{r}
+isSpike(umi, "ERCC") <- grepl("^ERCC-", rownames(umi))
+isSpike(umi, "MT") <- rownames(umi) %in% 
     c("ENSG00000198899", "ENSG00000198727", "ENSG00000198888",
     "ENSG00000198886", "ENSG00000212907", "ENSG00000198786",
     "ENSG00000198695", "ENSG00000198712", "ENSG00000198804",
@@ -293,23 +273,27 @@ isSpike(reads, "MT") <- rownames(reads) %in%
     "ENSG00000198840")
 ```
 
+
+
 ```{r}
-reads <- calculateQCMetrics(
-    reads,
+umi <- calculateQCMetrics(
+    umi,
     feature_controls = list(
-        ERCC = isSpike(reads, "ERCC"), 
-        MT = isSpike(reads, "MT")
+        ERCC = isSpike(umi, "ERCC"), 
+        MT = isSpike(umi, "MT")
     )
 )
 ```
 
+
 ```{r}
-filter_by_total_counts <- (reads$total_counts > 1.3e6)
-filter_by_expr_features <- (reads$total_features > 7000)
-filter_by_ERCC <- 
-    reads$batch != "NA19098.r2" & reads$pct_counts_ERCC < 25
-filter_by_MT <- reads$pct_counts_MT < 30
-reads$use <- (
+
+filter_by_expr_features <- (umi$total_features > 7000)
+filter_by_ERCC <- umi$batch != "NA19098.r2"
+filter_by_MT <- umi$pct_counts_MT < 10
+filter_by_total_counts <- (umi$total_counts > 25000)
+
+umi$use <- (
     # sufficient features (genes)
     filter_by_expr_features &
     # sufficient molecules counted
@@ -319,32 +303,76 @@ reads$use <- (
     # remove cells with unusual number of reads in MT genes
     filter_by_MT
 )
+```
 
-reads <- plotPCA(
-    reads,
+
+```{r}
+plotPhenoData(
+    umi,
+    aes_string(
+        x = "total_features",
+        y = "pct_counts_MT",
+        colour = "batch"
+    )
+)
+```
+
+
+```{r}
+plotPhenoData(
+    umi,
+    aes_string(
+        x = "total_features",
+        y = "pct_counts_ERCC",
+        colour = "batch"
+    )
+)
+```
+
+
+```{r}
+umi <- plotPCA(
+    umi,
     size_by = "total_features", 
     shape_by = "use",
     pca_data_input = "pdata",
     detect_outliers = TRUE,
     return_SCE = TRUE
 )
+```
 
+
+```{r}
 filter_genes <- apply(
-    counts(reads[, colData(reads)$use]), 
+    counts(umi[ , colData(umi)$use]), 
     1, 
     function(x) length(x[x > 1]) >= 2
 )
-rowData(reads)$use <- filter_genes
-assay(reads, "logcounts_raw") <- log2(counts(reads) + 1)
-reducedDim(reads) <- NULL
-saveRDS(reads, file = "tung/reads.rds")
+rowData(umi)$use <- filter_genes
 ```
 
+
+
+
 ```{r}
-options(stringsAsFactors = FALSE)
-umi <- readRDS("tung/umi.rds")
+assay(umi, "logcounts_raw") <- log2(counts(umi) + 1)
+reducedDim(umi) <- NULL
+saveRDS(umi, file = "umi.rds")
+```
+
+
+
+```{r}
+rowData(umi)
 umi.qc <- umi[rowData(umi)$use, colData(umi)$use]
+umi.qc
 endog_genes <- !rowData(umi.qc)$is_feature_control
+endog_genes
+```
+
+
+
+```{r}
 plotPCA(
     umi[endog_genes, ],
     exprs_values = "counts",
@@ -353,6 +381,9 @@ plotPCA(
     shape_by = "individual"
 )
 
+```
+
+```{r}
 plotPCA(
     umi[endog_genes, ],
     exprs_values = "logcounts_raw",
@@ -372,3 +403,33 @@ plotPCA(
 )
 ```
 
+
+```{r}
+biocLite("Rtsne",suppressUpdates = TRUE)
+```
+
+
+
+```{r}
+plotTSNE(
+    umi[endog_genes, ],
+    exprs_values = "logcounts_raw",
+    perplexity = 130,
+    colour_by = "batch",
+    size_by = "total_features",
+    shape_by = "individual",
+    rand_seed = 123456
+)
+```
+
+```{r}
+png("tSNE-plot.png")
+logcounts(umi.qc) <- log2(calculateCPM(umi.qc, use.size.factors = FALSE) + 1)
+plotPCA(
+    umi.qc[endog_genes, ],
+    colour_by = "batch",
+    size_by = "total_features",
+    shape_by = "individual"
+)
+dev.off()
+```
