@@ -13,9 +13,9 @@ We are going to get some public data from the Bioconductor website which in incl
 ```{r eval=FALSE}
 
 source("http://www.bioconductor.org/biocLite.R")
-biocLite("breastCancerNKI")
-biocLite("genefilter")
-biocLite("pheatmap")  
+biocLite("breastCancerNKI",suppressUpdates = TRUE)
+biocLite("genefilter",suppressUpdates = TRUE)
+biocLite("pheatmap",suppressUpdates = TRUE)  
 ```
 
 The `exprs` function can be used to extract the expression values for all patients in the study and all genes. The `rowSds` function will calculate the standard deviation for each gene
@@ -80,36 +80,15 @@ dev.off()
 
 ## ggbio
 
-```{r}
+```{r eval=FALSE}
 biocLite("ggbio",suppressUpdates=TRUE)
-biocLite("Homo.sapiens",suppressUpdates=TRUE)
 ```
+
+
 
 
 ```{r}
 library(ggbio)
-p.ideo <- Ideogram(genome = "hg19")
-p.ideo
-library(GenomicRanges)
-## special highlights instead of zoomin!
-p.ideo + xlim(GRanges("chr2", IRanges(1e8, 1e8+10000000)))
-```
-
-```{r}
-fl.bam <- system.file("extdata", "wg-brca1.sorted.bam", package = "biovizBase")
-library(Homo.sapiens)
-data(genesymbol, package = "biovizBase")
-wh <- genesymbol[c("BRCA1", "NBR1")]
-wh <- range(wh, ignore.strand = TRUE)
-wh <- keepSeqlevels(wh, "chr17")
-autoplot(fl.bam, which = wh)
-p.txdb <- autoplot(Homo.sapiens, which = wh)
-p.txdb
-autoplot(Homo.sapiens, which = wh, label.color = "black", color = "brown",
-fill = "brown")
-```
-
-```{r}
 snp <- read.table(system.file("extdata", "plink.assoc.sub.txt", package = "biovizBase"),
 header = TRUE)
 require(biovizBase)
@@ -143,7 +122,6 @@ seqlengths(dn)
 seqlengths(dn) <- seqlengths(ideoCyto$hg19)[names(seqlengths(dn))]
 ## then we change order
 dn <- keepSeqlevels(dn, paste0("chr", c(1:22, "X")))
-seqlengths(dn)
 autoplot(dn, layout = "karyogram")
 
 autoplot(dn, layout = "karyogram", aes(color = exReg, fill = exReg), alpha = 0.5) +
@@ -182,12 +160,15 @@ arrangeGrobByParsingLegend(crc.lst, widths = c(4, 1), legend.idx = 1, ncol = 3)
 
 ## Oncoprint
 
+```{r eval=FALSE}
+biocLite("ComplexHeatmap",suppressUpdates = TRUE)
+```
+
+
 https://www.bioconductor.org/packages/devel/bioc/vignettes/ComplexHeatmap/inst/doc/s8.oncoprint.html#toc_2
 
 
 ```{r}
-
-biocLite("ComplexHeatmap",suppressUpdates = TRUE)
 mat = read.table(paste0(system.file("extdata", package = "ComplexHeatmap"), 
     "/tcga_lung_adenocarcinoma_provisional_ras_raf_mek_jnk_signalling.txt"), 
     header = TRUE,stringsAsFactors=FALSE, sep = "\t")
@@ -219,11 +200,50 @@ col = c("MUT" = "#008000", "AMP" = "red", "HOMDEL" = "blue")
 
 ```{r}
 library(ComplexHeatmap)
+png("oncoprint.png",width=800,height=800)
 oncoPrint(mat, get_type = function(x) strsplit(x, ";")[[1]],
     alter_fun = alter_fun, col = col, 
     column_title = "OncoPrint for TCGA Lung Adenocarcinoma, genes in Ras Raf MEK JNK signalling",
     heatmap_legend_param = list(title = "Alternations", at = c("AMP", "HOMDEL", "MUT"), 
         labels = c("Amplification", "Deep deletion", "Mutation")))
+dev.off()
+```
 
+## Pathview
+
+```{r eval=FALSE}
+
+source("http://www.bioconductor.org/biocLite.R")
+biocLite("pathview",suppressUpdates = FALSE)
+
+```
+
+```{r}
+library(pathview)
+```
+
+
+## t-SNE
+
+```{r eval=FALSE}
+biocLite("SingleCellExperiment",suppressUpdates = TRUE)
+biocLite("scater",suppressUpdates = TRUE)
+```
+
+
+```{r}
+download.file("https://github.com/hemberg-lab/scRNA.seq.course/raw/master/tung/reads.txt",destfile = "reads.txt")
+download.file("https://raw.githubusercontent.com/hemberg-lab/scRNA.seq.course/master/tung/annotation.txt",destfile = "annotation.txt")
+library(SingleCellExperiment)
+library(scater)
+
+reads <- read.table("tung/reads.txt", sep = "\t")
+anno <- read.table("tung/annotation.txt", sep = "\t", header = TRUE)
+
+
+options(stringsAsFactors = FALSE)
+umi <- readRDS("tung/umi.rds")
+umi.qc <- umi[rowData(umi)$use, colData(umi)$use]
+endog_genes <- !rowData(umi.qc)$is_feature_control
 ```
 
